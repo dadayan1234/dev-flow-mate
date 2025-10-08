@@ -1,56 +1,64 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Code2, Plus, FolderKanban, CheckCircle2, Clock, Search, LogOut } from "lucide-react";
+import { useAuth } from "@/hooks/useAuth";
+import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/hooks/use-toast";
 
 interface Project {
   id: string;
   name: string;
-  description: string;
-  tasksTotal: number;
-  tasksCompleted: number;
-  lastUpdated: string;
+  description: string | null;
+  created_at: string;
 }
 
 const Dashboard = () => {
   const navigate = useNavigate();
+  const { user, signOut } = useAuth();
+  const { toast } = useToast();
   const [searchQuery, setSearchQuery] = useState("");
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  // Demo projects data
-  const [projects] = useState<Project[]>([
-    {
-      id: "1",
-      name: "DevNoteX Platform",
-      description: "Main platform development with React and FastAPI backend",
-      tasksTotal: 24,
-      tasksCompleted: 12,
-      lastUpdated: "2 hours ago",
-    },
-    {
-      id: "2",
-      name: "API Documentation",
-      description: "Comprehensive API docs and integration guides",
-      tasksTotal: 15,
-      tasksCompleted: 8,
-      lastUpdated: "1 day ago",
-    },
-    {
-      id: "3",
-      name: "Mobile App",
-      description: "React Native mobile client for iOS and Android",
-      tasksTotal: 32,
-      tasksCompleted: 5,
-      lastUpdated: "3 days ago",
-    },
-  ]);
+  useEffect(() => {
+    if (!user) {
+      navigate("/login");
+      return;
+    }
+
+    fetchProjects();
+  }, [user, navigate]);
+
+  const fetchProjects = async () => {
+    try {
+      const { data, error } = await supabase
+        .from("projects")
+        .select("*")
+        .order("created_at", { ascending: false });
+
+      if (error) throw error;
+      setProjects(data || []);
+    } catch (error: any) {
+      console.error("Error fetching projects:", error);
+      toast({
+        title: "Error loading projects",
+        description: error.message,
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const filteredProjects = projects.filter((project) =>
     project.name.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    await signOut();
     navigate("/login");
   };
 
@@ -93,20 +101,18 @@ const Dashboard = () => {
         <Card className="glass-card p-6 space-y-2 hover:border-secondary/50 transition-smooth">
           <div className="flex items-center gap-2 text-secondary">
             <CheckCircle2 className="h-5 w-5" />
-            <span className="text-sm font-medium">Tasks Completed</span>
+            <span className="text-sm font-medium">Total Projects</span>
           </div>
-          <p className="text-3xl font-bold">
-            {projects.reduce((acc, p) => acc + p.tasksCompleted, 0)}
-          </p>
+          <p className="text-3xl font-bold">{projects.length}</p>
         </Card>
 
         <Card className="glass-card p-6 space-y-2 hover:border-accent/50 transition-smooth">
           <div className="flex items-center gap-2 text-accent">
             <Clock className="h-5 w-5" />
-            <span className="text-sm font-medium">In Progress</span>
+            <span className="text-sm font-medium">Your Workspace</span>
           </div>
-          <p className="text-3xl font-bold">
-            {projects.reduce((acc, p) => acc + (p.tasksTotal - p.tasksCompleted), 0)}
+          <p className="text-sm font-medium text-muted-foreground">
+            {user?.email}
           </p>
         </Card>
       </div>
@@ -132,52 +138,52 @@ const Dashboard = () => {
         </div>
 
         {/* Projects Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {filteredProjects.map((project) => (
-            <Card
-              key={project.id}
-              className="glass-card p-6 space-y-4 hover:border-primary/50 hover:shadow-lg cursor-pointer transition-smooth group"
-              onClick={() => navigate(`/project/${project.id}`)}
-            >
-              <div className="space-y-2">
-                <h3 className="text-xl font-semibold group-hover:text-primary transition-colors">
-                  {project.name}
-                </h3>
-                <p className="text-sm text-muted-foreground line-clamp-2">
-                  {project.description}
-                </p>
-              </div>
-
-              <div className="space-y-2">
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-muted-foreground">Progress</span>
-                  <span className="font-medium">
-                    {project.tasksCompleted}/{project.tasksTotal} tasks
-                  </span>
-                </div>
-                <div className="h-2 bg-muted rounded-full overflow-hidden">
-                  <div
-                    className="h-full bg-gradient-to-r from-primary to-secondary transition-all duration-500"
-                    style={{
-                      width: `${(project.tasksCompleted / project.tasksTotal) * 100}%`,
-                    }}
-                  />
-                </div>
-              </div>
-
-              <div className="flex items-center justify-between text-xs text-muted-foreground pt-2 border-t border-border/50">
-                <span>Last updated</span>
-                <span>{project.lastUpdated}</span>
-              </div>
-            </Card>
-          ))}
-        </div>
-
-        {filteredProjects.length === 0 && (
-          <Card className="glass-card p-12 text-center space-y-2">
-            <p className="text-muted-foreground">No projects found</p>
-            <p className="text-sm text-muted-foreground">Try adjusting your search</p>
+        {loading ? (
+          <Card className="glass-card p-12 text-center">
+            <p className="text-muted-foreground">Loading projects...</p>
           </Card>
+        ) : (
+          <>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {filteredProjects.map((project) => (
+                <Card
+                  key={project.id}
+                  className="glass-card p-6 space-y-4 hover:border-primary/50 hover:shadow-lg cursor-pointer transition-smooth group"
+                  onClick={() => navigate(`/project/${project.id}`)}
+                >
+                  <div className="space-y-2">
+                    <h3 className="text-xl font-semibold group-hover:text-primary transition-colors">
+                      {project.name}
+                    </h3>
+                    <p className="text-sm text-muted-foreground line-clamp-2">
+                      {project.description || "No description"}
+                    </p>
+                  </div>
+
+                  <div className="flex items-center justify-between text-xs text-muted-foreground pt-2 border-t border-border/50">
+                    <span>Created</span>
+                    <span>{new Date(project.created_at).toLocaleDateString()}</span>
+                  </div>
+                </Card>
+              ))}
+            </div>
+
+            {filteredProjects.length === 0 && !loading && (
+              <Card className="glass-card p-12 text-center space-y-4">
+                <div>
+                  <FolderKanban className="h-12 w-12 mx-auto mb-4 opacity-50 text-primary" />
+                  <p className="text-muted-foreground text-lg font-medium">No projects yet</p>
+                  <p className="text-sm text-muted-foreground mt-2">
+                    Create your first project to get started
+                  </p>
+                </div>
+                <Button className="bg-primary hover:bg-primary/90" onClick={() => toast({ title: "Coming soon!", description: "Project creation will be available soon" })}>
+                  <Plus className="mr-2 h-4 w-4" />
+                  Create Your First Project
+                </Button>
+              </Card>
+            )}
+          </>
         )}
       </div>
     </div>
