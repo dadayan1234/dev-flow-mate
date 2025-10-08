@@ -1,9 +1,24 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, createContext, useContext, ReactNode } from "react";
 import { User, Session } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 import { useNavigate } from "react-router-dom";
+import { TablesInsert } from "@/integrations/supabase/types";
 
-export const useAuth = () => {
+// 1. Definisikan Tipe untuk Context
+type AuthContextType = {
+  user: User | null;
+  session: Session | null;
+  loading: boolean;
+  signUp: (email: string, password: string, fullName: string) => Promise<any>;
+  signIn: (email: string, password: string) => Promise<any>;
+  signOut: () => Promise<void>;
+};
+
+// 2. Buat Context
+const AuthContext = createContext<AuthContextType | undefined>(undefined);
+
+// 3. Komponen AuthProvider (sudah mencakup perbaikan sebelumnya)
+export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
@@ -45,18 +60,9 @@ export const useAuth = () => {
 
     if (error) throw error;
     
-    // Create profile
-    if (data.user) {
-      const { error: profileError } = await supabase
-        .from('profiles')
-        .insert({
-          user_id: data.user.id,
-          full_name: fullName,
-        });
-      
-      if (profileError) throw profileError;
-    }
-
+    // FIX RLS/TIMING: Hapus logika insert profile dari sini.
+    // Pembuatan profile akan ditangani oleh Database Trigger (Langkah 2).
+    
     return data;
   };
 
@@ -76,7 +82,7 @@ export const useAuth = () => {
     navigate("/login");
   };
 
-  return {
+  const value: AuthContextType = {
     user,
     session,
     loading,
@@ -84,4 +90,17 @@ export const useAuth = () => {
     signIn,
     signOut,
   };
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+};
+
+// 4. Hook useAuth
+export const useAuth = () => {
+  const context = useContext(AuthContext);
+
+  if (context === undefined) {
+    throw new Error('useAuth must be used within an AuthProvider');
+  }
+
+  return context;
 };

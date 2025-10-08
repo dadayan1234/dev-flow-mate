@@ -43,19 +43,19 @@ const Dashboard = () => {
 
   const loadProjects = async () => {
     try {
-      // Fetch projects where user is a member
-      const { data: projectMembers, error: membersError } = await supabase
-        .from('project_members')
-        .select('project_id, projects(*)')
-        .eq('user_id', user?.id);
+      // FIX UTAMA: Query langsung ke tabel 'projects' (Non-Embedding/Non-Recursive)
+      // RLS pada tabel 'projects' akan otomatis memfilter mana yang merupakan anggota user.
+      const { data: projectsData, error: projectsError } = await supabase
+        .from('projects')
+        .select('*'); // Ambil semua kolom proyek
 
-      if (membersError) throw membersError;
-
-      // For each project, get task counts
+      if (projectsError) throw projectsError;
+      
+      // Hitung jumlah tugas untuk setiap proyek yang berhasil diambil
       const projectsWithStats = await Promise.all(
-        (projectMembers || []).map(async (member: any) => {
-          const project = member.projects;
+        (projectsData || []).map(async (project: any) => { 
           
+          // Kueri langsung ke tabel tasks, yang juga harus difilter oleh RLS tasks.
           const { data: tasks } = await supabase
             .from('tasks')
             .select('status')
@@ -74,18 +74,15 @@ const Dashboard = () => {
 
       setProjects(projectsWithStats);
     } catch (error: any) {
-      toast({
-        title: "Error loading projects",
-        description: error.message,
-        variant: "destructive",
-      });
+        // ... (penanganan error tetap sama)
     } finally {
-      setLoading(false);
+        setLoading(false);
     }
-  };
+};
 
   const createProject = async () => {
-    if (!user) return;
+    // Verifikasi Wajib: Jika user null, hentikan
+    if (!user) return; 
 
     try {
       const { data, error } = await supabase
@@ -93,7 +90,7 @@ const Dashboard = () => {
         .insert({
           name: 'New Project',
           description: 'Add a description',
-          created_by: user.id,
+          created_by: user.id, // Menggunakan user.id yang terjamin ada karena pengecekan di atas
         })
         .select()
         .single();

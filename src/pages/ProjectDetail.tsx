@@ -4,20 +4,71 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ArrowLeft, Github, Users, Settings, FileText, ListTodo, BookOpen } from "lucide-react";
+// MENAMBAHKAN IMPORT YANG DIBUTUHKAN:
+import { useAuth } from "@/hooks/useAuth"; 
+import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/hooks/use-toast";
 
 const ProjectDetail = () => {
   const navigate = useNavigate();
-  const { id } = useParams();
+  const { id } = useParams<{ id: string }>(); 
   const [activeTab, setActiveTab] = useState("notes");
+  
+  // MENGAMBIL DATA PENGGUNA DAN TOAST
+  const { user } = useAuth(); 
+  const { toast } = useToast();
 
-  // Demo project data
+  // Demo project data (Gunakan ID asli dari URL)
   const project = {
-    id,
+    id: id || "", // Pastikan ID ada
     name: "DevNoteX Platform",
     description: "Main platform development with React and FastAPI backend",
     repoUrl: "https://github.com/devnotex/platform",
-    members: 4,
+    members: 4, // Ini masih hardcoded
   };
+
+  // FUNGSI UTAMA UNTUK MEMBUAT ITEM BARU (Note, Task, Doc)
+  const handleCreateItem = async (table: 'tasks' | 'notes' | 'documents', defaultTitle: string) => {
+    if (!user || !id) {
+      toast({ title: "Error", description: "User or Project ID missing.", variant: "destructive" });
+      return;
+    }
+
+    try {
+      const payload: any = {
+        project_id: id,
+        title: defaultTitle,
+        created_by: user.id,
+      };
+
+      // Tambahkan status default untuk Tasks
+      if (table === 'tasks') {
+        payload.status = 'todo'; 
+      }
+      
+      const { error } = await supabase.from(table).insert([payload]);
+
+      if (error) throw error;
+
+      const itemName = table.charAt(0).toUpperCase() + table.slice(1);
+      toast({
+        title: `${itemName} created!`,
+        description: `New ${itemName.toLowerCase()} added to ${project.name}.`,
+      });
+      
+    } catch (error: any) {
+      toast({
+        title: `Error creating item`,
+        description: error.message || 'Failed to create item. Check project membership.',
+        variant: "destructive",
+      });
+    }
+  };
+  
+  const handleNewNote = () => handleCreateItem('notes', 'Untitled Note');
+  const handleNewTask = () => handleCreateItem('tasks', 'New Task Title');
+  const handleNewDocument = () => handleCreateItem('documents', 'New Document');
+
 
   return (
     <div className="min-h-screen p-6 space-y-6">
@@ -96,7 +147,7 @@ const ProjectDetail = () => {
           <Card className="glass-card p-8 min-h-[400px] space-y-4">
             <div className="flex items-center justify-between">
               <h2 className="text-xl font-semibold">Project Notes</h2>
-              <Button className="bg-primary hover:bg-primary/90">
+              <Button className="bg-primary hover:bg-primary/90" onClick={handleNewNote}>
                 New Note
               </Button>
             </div>
@@ -111,7 +162,7 @@ const ProjectDetail = () => {
           <Card className="glass-card p-8 min-h-[400px] space-y-4">
             <div className="flex items-center justify-between">
               <h2 className="text-xl font-semibold">Task Board</h2>
-              <Button className="bg-secondary hover:bg-secondary/90">
+              <Button className="bg-secondary hover:bg-secondary/90" onClick={handleNewTask}>
                 New Task
               </Button>
             </div>
@@ -126,7 +177,7 @@ const ProjectDetail = () => {
           <Card className="glass-card p-8 min-h-[400px] space-y-4">
             <div className="flex items-center justify-between">
               <h2 className="text-xl font-semibold">Documentation</h2>
-              <Button className="bg-accent hover:bg-accent/90">
+              <Button className="bg-accent hover:bg-accent/90" onClick={handleNewDocument}>
                 New Document
               </Button>
             </div>

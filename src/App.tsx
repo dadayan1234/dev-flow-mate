@@ -36,3 +36,29 @@ const App = () => (
 );
 
 export default App;
+
+// import { useEffect, useState } from "react";
+// import { supabase } from "./integrations/supabase/client";
+
+// export default function App() {
+//   const [status, setStatus] = useState("Connecting...");
+
+//   useEffect(() => {
+//     const test = async () => {
+//       const { data, error } = await supabase.from("projects").select("*").limit(1);
+//       if (error) {
+//         setStatus("❌ Error: " + error.message);
+//       } else {
+//         setStatus("✅ Supabase connected!");
+//       }
+//     };
+//     test();
+//   }, []);
+
+//   return (
+//     <div style={{ padding: "2rem", fontFamily: "sans-serif" }}>
+//       <h1>Supabase Test</h1>
+//       <p>{status}</p>
+//     </div>
+//   );
+// }
