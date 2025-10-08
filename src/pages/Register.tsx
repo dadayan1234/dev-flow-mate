@@ -28,7 +28,7 @@ const Register = () => {
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (formData.password !== formData.confirmPassword) {
       toast({
         title: "Password mismatch",
@@ -50,16 +50,25 @@ const Register = () => {
     setLoading(true);
 
     try {
-      await signUp(formData.email, formData.password, formData.name);
-      toast({
-        title: "Account created!",
-        description: "Welcome to DevNoteX. Let's get started!",
-      });
-      navigate("/dashboard");
+      const { error } = await signUp(formData.email, formData.password, formData.name);
+
+      if (error) {
+        toast({
+          title: "Registration failed",
+          description: error.message || "Could not create account. Please try again.",
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: "Account created!",
+          description: "Welcome to DevNoteX. Let's get started!",
+        });
+        navigate("/dashboard");
+      }
     } catch (error: any) {
       toast({
         title: "Registration failed",
-        description: error.message || "Could not create account. Please try again.",
+        description: "An unexpected error occurred. Please try again.",
         variant: "destructive",
       });
     } finally {
@@ -69,11 +78,9 @@ const Register = () => {
 
   return (
     <div className="min-h-screen flex items-center justify-center p-4 relative overflow-hidden">
-      {/* Animated background gradient */}
       <div className="absolute inset-0 bg-gradient-to-br from-secondary/10 via-background to-primary/10 animate-pulse" />
-      
+
       <Card className="w-full max-w-md glass-card relative z-10 p-8 space-y-6 animate-slide-up">
-        {/* Logo */}
         <div className="flex items-center justify-center gap-2 mb-2">
           <div className="p-2 rounded-lg bg-secondary/20 glow-blue">
             <Code2 className="h-8 w-8 text-secondary" />
@@ -82,7 +89,7 @@ const Register = () => {
             DevNoteX
           </h1>
         </div>
-        
+
         <div className="text-center space-y-2">
           <h2 className="text-2xl font-semibold">Create Account</h2>
           <p className="text-muted-foreground">Join the developer workspace</p>

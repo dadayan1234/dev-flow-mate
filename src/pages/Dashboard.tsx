@@ -5,7 +5,7 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Code2, Plus, FolderKanban, CheckCircle2, Clock, Search, LogOut } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
-import { supabase } from "@/integrations/supabase/client";
+import api from "@/utils/api";
 import { useToast } from "@/hooks/use-toast";
 
 interface Project {
@@ -43,59 +43,48 @@ const Dashboard = () => {
 
   const loadProjects = async () => {
     try {
-      // FIX UTAMA: Query langsung ke tabel 'projects' (Non-Embedding/Non-Recursive)
-      // RLS pada tabel 'projects' akan otomatis memfilter mana yang merupakan anggota user.
-      const { data: projectsData, error: projectsError } = await supabase
-        .from('projects')
-        .select('*'); // Ambil semua kolom proyek
+      const { data: projectsData } = await api.get('/api/projects');
 
-      if (projectsError) throw projectsError;
-      
-      // Hitung jumlah tugas untuk setiap proyek yang berhasil diambil
       const projectsWithStats = await Promise.all(
-        (projectsData || []).map(async (project: any) => { 
-          
-          // Kueri langsung ke tabel tasks, yang juga harus difilter oleh RLS tasks.
-          const { data: tasks } = await supabase
-            .from('tasks')
-            .select('status')
-            .eq('project_id', project.id);
+        (projectsData || []).map(async (project: Project) => {
+          try {
+            const { data: stats } = await api.get(`/api/projects/${project.id}/stats`);
 
-          const tasksTotal = tasks?.length || 0;
-          const tasksCompleted = tasks?.filter(t => t.status === 'done').length || 0;
-
-          return {
-            ...project,
-            tasksTotal,
-            tasksCompleted,
-          };
+            return {
+              ...project,
+              tasksTotal: stats.tasks_total || 0,
+              tasksCompleted: stats.tasks_completed || 0,
+            };
+          } catch (error) {
+            return {
+              ...project,
+              tasksTotal: 0,
+              tasksCompleted: 0,
+            };
+          }
         })
       );
 
       setProjects(projectsWithStats);
     } catch (error: any) {
-        // ... (penanganan error tetap sama)
+      toast({
+        title: "Error loading projects",
+        description: error.response?.data?.detail || "Failed to load projects",
+        variant: "destructive",
+      });
     } finally {
-        setLoading(false);
+      setLoading(false);
     }
-};
+  };
 
   const createProject = async () => {
-    // Verifikasi Wajib: Jika user null, hentikan
-    if (!user) return; 
+    if (!user) return;
 
     try {
-      const { data, error } = await supabase
-        .from('projects')
-        .insert({
-          name: 'New Project',
-          description: 'Add a description',
-          created_by: user.id, // Menggunakan user.id yang terjamin ada karena pengecekan di atas
-        })
-        .select()
-        .single();
-
-      if (error) throw error;
+      const { data } = await api.post('/api/projects', {
+        name: 'New Project',
+        description: 'Add a description',
+      });
 
       toast({
         title: "Project created!",
@@ -107,7 +96,7 @@ const Dashboard = () => {
     } catch (error: any) {
       toast({
         title: "Error creating project",
-        description: error.message,
+        description: error.response?.data?.detail || "Failed to create project",
         variant: "destructive",
       });
     }
@@ -134,7 +123,6 @@ const Dashboard = () => {
 
   return (
     <div className="min-h-screen p-6 space-y-6">
-      {/* Header */}
       <header className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="p-2 rounded-lg bg-primary/20 glow-purple">
@@ -147,7 +135,7 @@ const Dashboard = () => {
             <p className="text-sm text-muted-foreground">Developer Workspace</p>
           </div>
         </div>
-        
+
         <Button
           variant="outline"
           onClick={handleLogout}
@@ -158,7 +146,6 @@ const Dashboard = () => {
         </Button>
       </header>
 
-      {/* Stats Overview */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <Card className="glass-card p-6 space-y-2 hover:border-primary/50 transition-smooth">
           <div className="flex items-center gap-2 text-primary">
@@ -189,7 +176,6 @@ const Dashboard = () => {
         </Card>
       </div>
 
-      {/* Projects Section */}
       <div className="space-y-4">
         <div className="flex items-center justify-between gap-4">
           <div className="relative flex-1 max-w-md">
@@ -202,8 +188,8 @@ const Dashboard = () => {
               className="pl-10 bg-muted/50 border-border/50 focus:border-primary transition-smooth"
             />
           </div>
-          
-          <Button 
+
+          <Button
             onClick={createProject}
             className="bg-primary hover:bg-primary/90 transition-smooth group"
           >
@@ -212,7 +198,6 @@ const Dashboard = () => {
           </Button>
         </div>
 
-        {/* Projects Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {filteredProjects.map((project) => (
             <Card
@@ -240,7 +225,7 @@ const Dashboard = () => {
                   <div
                     className="h-full bg-gradient-to-r from-primary to-secondary transition-all duration-500"
                     style={{
-                      width: project.tasksTotal > 0 
+                      width: project.tasksTotal > 0
                         ? `${(project.tasksCompleted / project.tasksTotal) * 100}%`
                         : '0%',
                     }}
@@ -265,7 +250,7 @@ const Dashboard = () => {
                 Create your first project to get started
               </p>
             </div>
-            <Button 
+            <Button
               onClick={createProject}
               className="bg-primary hover:bg-primary/90"
             >

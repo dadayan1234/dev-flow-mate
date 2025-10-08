@@ -4,30 +4,26 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ArrowLeft, Github, Users, Settings, FileText, ListTodo, BookOpen } from "lucide-react";
-// MENAMBAHKAN IMPORT YANG DIBUTUHKAN:
-import { useAuth } from "@/hooks/useAuth"; 
-import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/useAuth";
+import api from "@/utils/api";
 import { useToast } from "@/hooks/use-toast";
 
 const ProjectDetail = () => {
   const navigate = useNavigate();
-  const { id } = useParams<{ id: string }>(); 
+  const { id } = useParams<{ id: string }>();
   const [activeTab, setActiveTab] = useState("notes");
-  
-  // MENGAMBIL DATA PENGGUNA DAN TOAST
-  const { user } = useAuth(); 
+
+  const { user } = useAuth();
   const { toast } = useToast();
 
-  // Demo project data (Gunakan ID asli dari URL)
   const project = {
-    id: id || "", // Pastikan ID ada
+    id: id || "",
     name: "DevNoteX Platform",
     description: "Main platform development with React and FastAPI backend",
     repoUrl: "https://github.com/devnotex/platform",
-    members: 4, // Ini masih hardcoded
+    members: 4,
   };
 
-  // FUNGSI UTAMA UNTUK MEMBUAT ITEM BARU (Note, Task, Doc)
   const handleCreateItem = async (table: 'tasks' | 'notes' | 'documents', defaultTitle: string) => {
     if (!user || !id) {
       toast({ title: "Error", description: "User or Project ID missing.", variant: "destructive" });
@@ -36,43 +32,36 @@ const ProjectDetail = () => {
 
     try {
       const payload: any = {
-        project_id: id,
         title: defaultTitle,
-        created_by: user.id,
       };
 
-      // Tambahkan status default untuk Tasks
       if (table === 'tasks') {
-        payload.status = 'todo'; 
+        payload.status = 'todo';
       }
-      
-      const { error } = await supabase.from(table).insert([payload]);
 
-      if (error) throw error;
+      await api.post(`/api/projects/${id}/${table}`, payload);
 
       const itemName = table.charAt(0).toUpperCase() + table.slice(1);
       toast({
         title: `${itemName} created!`,
         description: `New ${itemName.toLowerCase()} added to ${project.name}.`,
       });
-      
+
     } catch (error: any) {
       toast({
         title: `Error creating item`,
-        description: error.message || 'Failed to create item. Check project membership.',
+        description: error.response?.data?.detail || 'Failed to create item. Check project membership.',
         variant: "destructive",
       });
     }
   };
-  
+
   const handleNewNote = () => handleCreateItem('notes', 'Untitled Note');
   const handleNewTask = () => handleCreateItem('tasks', 'New Task Title');
   const handleNewDocument = () => handleCreateItem('documents', 'New Document');
 
-
   return (
     <div className="min-h-screen p-6 space-y-6">
-      {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
           <Button
@@ -83,7 +72,7 @@ const ProjectDetail = () => {
           >
             <ArrowLeft className="h-4 w-4" />
           </Button>
-          
+
           <div>
             <h1 className="text-3xl font-bold">{project.name}</h1>
             <p className="text-muted-foreground">{project.description}</p>
@@ -98,7 +87,7 @@ const ProjectDetail = () => {
             <Github className="mr-2 h-4 w-4" />
             Repository
           </Button>
-          
+
           <Button
             variant="outline"
             className="border-border/50 hover:border-primary transition-smooth"
@@ -106,7 +95,7 @@ const ProjectDetail = () => {
             <Users className="mr-2 h-4 w-4" />
             {project.members} Members
           </Button>
-          
+
           <Button
             variant="outline"
             size="icon"
@@ -117,7 +106,6 @@ const ProjectDetail = () => {
         </div>
       </div>
 
-      {/* Content Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
         <TabsList className="bg-muted/50 border border-border/50 p-1">
           <TabsTrigger

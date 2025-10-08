@@ -27,16 +27,25 @@ const Login = () => {
     setLoading(true);
 
     try {
-      await signIn(email, password);
-      toast({
-        title: "Welcome back!",
-        description: "Successfully logged in to DevNoteX",
-      });
-      navigate("/dashboard");
+      const { error } = await signIn(email, password);
+
+      if (error) {
+        toast({
+          title: "Login failed",
+          description: error.message || "Invalid credentials. Please try again.",
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: "Welcome back!",
+          description: "Successfully logged in to DevNoteX",
+        });
+        navigate("/dashboard");
+      }
     } catch (error: any) {
       toast({
         title: "Login failed",
-        description: error.message || "Invalid credentials. Please try again.",
+        description: "An unexpected error occurred. Please try again.",
         variant: "destructive",
       });
     } finally {

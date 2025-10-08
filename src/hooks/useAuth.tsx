@@ -1,90 +1,107 @@
 import { useEffect, useState, createContext, useContext, ReactNode } from "react";
-import { User, Session } from "@supabase/supabase-js";
-import { supabase } from "@/integrations/supabase/client";
 import { useNavigate } from "react-router-dom";
-import { TablesInsert } from "@/integrations/supabase/types";
+import api from "@/utils/api";
 
-// 1. Definisikan Tipe untuk Context
+interface User {
+  id: string;
+  email: string;
+  full_name: string;
+  avatar_url: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 type AuthContextType = {
   user: User | null;
-  session: Session | null;
   loading: boolean;
   signUp: (email: string, password: string, fullName: string) => Promise<any>;
   signIn: (email: string, password: string) => Promise<any>;
   signOut: () => Promise<void>;
 };
 
-// 2. Buat Context
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-// 3. Komponen AuthProvider (sudah mencakup perbaikan sebelumnya)
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
-  const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
 
   useEffect(() => {
-    // Set up auth state listener
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (event, session) => {
-        setSession(session);
-        setUser(session?.user ?? null);
-        setLoading(false);
+    const token = localStorage.getItem('access_token');
+    const storedUser = localStorage.getItem('user');
+
+    if (token && storedUser) {
+      try {
+        setUser(JSON.parse(storedUser));
+      } catch (error) {
+        localStorage.removeItem('access_token');
+        localStorage.removeItem('user');
       }
-    );
+    }
 
-    // Check for existing session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-      setLoading(false);
-    });
-
-    return () => subscription.unsubscribe();
+    setLoading(false);
   }, []);
 
   const signUp = async (email: string, password: string, fullName: string) => {
-    const redirectUrl = `${window.location.origin}/dashboard`;
-    
-    const { data, error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        emailRedirectTo: redirectUrl,
-        data: {
-          full_name: fullName,
-        }
-      }
-    });
+    try {
+      const response = await api.post('/api/auth/register', {
+        email,
+        password,
+        full_name: fullName,
+      });
 
-    if (error) throw error;
-    
-    // FIX RLS/TIMING: Hapus logika insert profile dari sini.
-    // Pembuatan profile akan ditangani oleh Database Trigger (Langkah 2).
-    
-    return data;
+      const { access_token, user: userData } = response.data;
+
+      localStorage.setItem('access_token', access_token);
+      localStorage.setItem('user', JSON.stringify(userData));
+
+      setUser(userData);
+
+      return { data: response.data, error: null };
+    } catch (error: any) {
+      return {
+        data: null,
+        error: {
+          message: error.response?.data?.detail || 'Registration failed',
+        },
+      };
+    }
   };
 
   const signIn = async (email: string, password: string) => {
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
+    try {
+      const response = await api.post('/api/auth/login', {
+        email,
+        password,
+      });
 
-    if (error) throw error;
-    return data;
+      const { access_token, user: userData } = response.data;
+
+      localStorage.setItem('access_token', access_token);
+      localStorage.setItem('user', JSON.stringify(userData));
+
+      setUser(userData);
+
+      return { data: response.data, error: null };
+    } catch (error: any) {
+      return {
+        data: null,
+        error: {
+          message: error.response?.data?.detail || 'Login failed',
+        },
+      };
+    }
   };
 
   const signOut = async () => {
-    const { error } = await supabase.auth.signOut();
-    if (error) throw error;
+    localStorage.removeItem('access_token');
+    localStorage.removeItem('user');
+    setUser(null);
     navigate("/login");
   };
 
   const value: AuthContextType = {
     user,
-    session,
     loading,
     signUp,
     signIn,
@@ -94,7 +111,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };
 
-// 4. Hook useAuth
 export const useAuth = () => {
   const context = useContext(AuthContext);
 
