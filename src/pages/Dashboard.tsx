@@ -12,37 +12,68 @@ interface Project {
   id: string;
   name: string;
   description: string | null;
+  repo_url: string | null;
   created_at: string;
+}
+
+interface ProjectWithStats extends Project {
+  tasksTotal: number;
+  tasksCompleted: number;
 }
 
 const Dashboard = () => {
   const navigate = useNavigate();
-  const { user, signOut } = useAuth();
+  const { user, loading: authLoading, signOut } = useAuth();
   const { toast } = useToast();
   const [searchQuery, setSearchQuery] = useState("");
-  const [projects, setProjects] = useState<Project[]>([]);
+  const [projects, setProjects] = useState<ProjectWithStats[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!user) {
+    if (!authLoading && !user) {
       navigate("/login");
-      return;
     }
+  }, [user, authLoading, navigate]);
 
-    fetchProjects();
-  }, [user, navigate]);
+  useEffect(() => {
+    if (user) {
+      loadProjects();
+    }
+  }, [user]);
 
-  const fetchProjects = async () => {
+  const loadProjects = async () => {
     try {
-      const { data, error } = await supabase
-        .from("projects")
-        .select("*")
-        .order("created_at", { ascending: false });
+      // Fetch projects where user is a member
+      const { data: projectMembers, error: membersError } = await supabase
+        .from('project_members')
+        .select('project_id, projects(*)')
+        .eq('user_id', user?.id);
 
-      if (error) throw error;
-      setProjects(data || []);
+      if (membersError) throw membersError;
+
+      // For each project, get task counts
+      const projectsWithStats = await Promise.all(
+        (projectMembers || []).map(async (member: any) => {
+          const project = member.projects;
+          
+          const { data: tasks } = await supabase
+            .from('tasks')
+            .select('status')
+            .eq('project_id', project.id);
+
+          const tasksTotal = tasks?.length || 0;
+          const tasksCompleted = tasks?.filter(t => t.status === 'done').length || 0;
+
+          return {
+            ...project,
+            tasksTotal,
+            tasksCompleted,
+          };
+        })
+      );
+
+      setProjects(projectsWithStats);
     } catch (error: any) {
-      console.error("Error fetching projects:", error);
       toast({
         title: "Error loading projects",
         description: error.message,
@@ -53,14 +84,56 @@ const Dashboard = () => {
     }
   };
 
+  const createProject = async () => {
+    if (!user) return;
+
+    try {
+      const { data, error } = await supabase
+        .from('projects')
+        .insert({
+          name: 'New Project',
+          description: 'Add a description',
+          created_by: user.id,
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      toast({
+        title: "Project created!",
+        description: "Your new project is ready",
+      });
+
+      loadProjects();
+      navigate(`/project/${data.id}`);
+    } catch (error: any) {
+      toast({
+        title: "Error creating project",
+        description: error.message,
+        variant: "destructive",
+      });
+    }
+  };
+
   const filteredProjects = projects.filter((project) =>
     project.name.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   const handleLogout = async () => {
     await signOut();
-    navigate("/login");
   };
+
+  if (authLoading || loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center space-y-4">
+          <div className="w-16 h-16 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="text-muted-foreground">Loading workspace...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen p-6 space-y-6">
@@ -101,18 +174,20 @@ const Dashboard = () => {
         <Card className="glass-card p-6 space-y-2 hover:border-secondary/50 transition-smooth">
           <div className="flex items-center gap-2 text-secondary">
             <CheckCircle2 className="h-5 w-5" />
-            <span className="text-sm font-medium">Total Projects</span>
+            <span className="text-sm font-medium">Tasks Completed</span>
           </div>
-          <p className="text-3xl font-bold">{projects.length}</p>
+          <p className="text-3xl font-bold">
+            {projects.reduce((acc, p) => acc + p.tasksCompleted, 0)}
+          </p>
         </Card>
 
         <Card className="glass-card p-6 space-y-2 hover:border-accent/50 transition-smooth">
           <div className="flex items-center gap-2 text-accent">
             <Clock className="h-5 w-5" />
-            <span className="text-sm font-medium">Your Workspace</span>
+            <span className="text-sm font-medium">In Progress</span>
           </div>
-          <p className="text-sm font-medium text-muted-foreground">
-            {user?.email}
+          <p className="text-3xl font-bold">
+            {projects.reduce((acc, p) => acc + (p.tasksTotal - p.tasksCompleted), 0)}
           </p>
         </Card>
       </div>
@@ -131,59 +206,76 @@ const Dashboard = () => {
             />
           </div>
           
-          <Button className="bg-primary hover:bg-primary/90 transition-smooth group">
+          <Button 
+            onClick={createProject}
+            className="bg-primary hover:bg-primary/90 transition-smooth group"
+          >
             <Plus className="mr-2 h-4 w-4" />
             New Project
           </Button>
         </div>
 
         {/* Projects Grid */}
-        {loading ? (
-          <Card className="glass-card p-12 text-center">
-            <p className="text-muted-foreground">Loading projects...</p>
-          </Card>
-        ) : (
-          <>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {filteredProjects.map((project) => (
-                <Card
-                  key={project.id}
-                  className="glass-card p-6 space-y-4 hover:border-primary/50 hover:shadow-lg cursor-pointer transition-smooth group"
-                  onClick={() => navigate(`/project/${project.id}`)}
-                >
-                  <div className="space-y-2">
-                    <h3 className="text-xl font-semibold group-hover:text-primary transition-colors">
-                      {project.name}
-                    </h3>
-                    <p className="text-sm text-muted-foreground line-clamp-2">
-                      {project.description || "No description"}
-                    </p>
-                  </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {filteredProjects.map((project) => (
+            <Card
+              key={project.id}
+              className="glass-card p-6 space-y-4 hover:border-primary/50 hover:shadow-lg cursor-pointer transition-smooth group"
+              onClick={() => navigate(`/project/${project.id}`)}
+            >
+              <div className="space-y-2">
+                <h3 className="text-xl font-semibold group-hover:text-primary transition-colors">
+                  {project.name}
+                </h3>
+                <p className="text-sm text-muted-foreground line-clamp-2">
+                  {project.description || "No description"}
+                </p>
+              </div>
 
-                  <div className="flex items-center justify-between text-xs text-muted-foreground pt-2 border-t border-border/50">
-                    <span>Created</span>
-                    <span>{new Date(project.created_at).toLocaleDateString()}</span>
-                  </div>
-                </Card>
-              ))}
-            </div>
-
-            {filteredProjects.length === 0 && !loading && (
-              <Card className="glass-card p-12 text-center space-y-4">
-                <div>
-                  <FolderKanban className="h-12 w-12 mx-auto mb-4 opacity-50 text-primary" />
-                  <p className="text-muted-foreground text-lg font-medium">No projects yet</p>
-                  <p className="text-sm text-muted-foreground mt-2">
-                    Create your first project to get started
-                  </p>
+              <div className="space-y-2">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-muted-foreground">Progress</span>
+                  <span className="font-medium">
+                    {project.tasksCompleted}/{project.tasksTotal} tasks
+                  </span>
                 </div>
-                <Button className="bg-primary hover:bg-primary/90" onClick={() => toast({ title: "Coming soon!", description: "Project creation will be available soon" })}>
-                  <Plus className="mr-2 h-4 w-4" />
-                  Create Your First Project
-                </Button>
-              </Card>
-            )}
-          </>
+                <div className="h-2 bg-muted rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-gradient-to-r from-primary to-secondary transition-all duration-500"
+                    style={{
+                      width: project.tasksTotal > 0 
+                        ? `${(project.tasksCompleted / project.tasksTotal) * 100}%`
+                        : '0%',
+                    }}
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between text-xs text-muted-foreground pt-2 border-t border-border/50">
+                <span>Created</span>
+                <span>{new Date(project.created_at).toLocaleDateString()}</span>
+              </div>
+            </Card>
+          ))}
+        </div>
+
+        {filteredProjects.length === 0 && (
+          <Card className="glass-card p-12 text-center space-y-4">
+            <FolderKanban className="h-12 w-12 mx-auto opacity-50 text-primary" />
+            <div>
+              <p className="text-lg font-medium">No projects yet</p>
+              <p className="text-sm text-muted-foreground mt-2">
+                Create your first project to get started
+              </p>
+            </div>
+            <Button 
+              onClick={createProject}
+              className="bg-primary hover:bg-primary/90"
+            >
+              <Plus className="mr-2 h-4 w-4" />
+              Create Your First Project
+            </Button>
+          </Card>
         )}
       </div>
     </div>

@@ -40,7 +40,7 @@ const Register = () => {
 
     if (formData.password.length < 6) {
       toast({
-        title: "Password too short",
+        title: "Weak password",
         description: "Password must be at least 6 characters long.",
         variant: "destructive",
       });
@@ -49,21 +49,21 @@ const Register = () => {
 
     setLoading(true);
 
-    const { error } = await signUp(formData.email, formData.password, formData.name);
-
-    if (error) {
-      toast({
-        title: "Registration failed",
-        description: error.message || "Could not create account",
-        variant: "destructive",
-      });
-      setLoading(false);
-    } else {
+    try {
+      await signUp(formData.email, formData.password, formData.name);
       toast({
         title: "Account created!",
         description: "Welcome to DevNoteX. Let's get started!",
       });
       navigate("/dashboard");
+    } catch (error: any) {
+      toast({
+        title: "Registration failed",
+        description: error.message || "Could not create account. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
     }
   };
 
